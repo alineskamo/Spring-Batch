@@ -1,17 +1,17 @@
 package com.study.springbatch;
 
+import java.util.Arrays;
+import java.util.List;
+
 import org.springframework.batch.core.Job;
 import org.springframework.batch.core.Step;
-import org.springframework.batch.core.StepContribution;
-import org.springframework.batch.core.configuration.annotation.StepScope;
 import org.springframework.batch.core.job.builder.JobBuilder;
 import org.springframework.batch.core.launch.support.RunIdIncrementer;
 import org.springframework.batch.core.repository.JobRepository;
-import org.springframework.batch.core.scope.context.ChunkContext;
 import org.springframework.batch.core.step.builder.StepBuilder;
-import org.springframework.batch.core.step.tasklet.Tasklet;
-import org.springframework.batch.repeat.RepeatStatus;
-import org.springframework.beans.factory.annotation.Value;
+import org.springframework.batch.item.ItemWriter;
+import org.springframework.batch.item.function.FunctionItemProcessor;
+import org.springframework.batch.item.support.IteratorItemReader;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.transaction.PlatformTransactionManager;
@@ -20,33 +20,35 @@ import org.springframework.transaction.PlatformTransactionManager;
 public class BatchConfig {
 
     @Bean
-    Job printHelloJob(JobRepository jobRepository, Step printHelloStep) {
-		return new JobBuilder("printHelloJob", jobRepository)
-				.start(printHelloStep)
+    Job printEvenOrOddJob(JobRepository jobRepository, Step printEvenOrOddStep) {
+		return new JobBuilder("printEvenOrOddJob", jobRepository) //printEvenOrOddJob -> jobName
+				.start(printEvenOrOddStep)
 				.incrementer(new RunIdIncrementer())
 				.build();
 
 	}
 	
 	@Bean
-	Step printHelloStep(JobRepository jobRepository, PlatformTransactionManager transactionManager) {
-		return new StepBuilder("printHelloStep", jobRepository)
-				.tasklet(printHelloTasklet(null), transactionManager)
+	Step printEvenOrOddStep(JobRepository jobRepository, PlatformTransactionManager transactionManager) {
+		return new StepBuilder("printEvenOrOddStep", jobRepository)
+				.<Integer, String>chunk(20, transactionManager)
+				.reader(countToTenReader())
+				.processor(everOrdOddProcessor())
+				.writer(printWriter())
 				.build();
 	}
 	
-	@Bean
-	@StepScope //annotation required to add the parameter in the step context
-	Tasklet printHelloTasklet(@Value("#{jobParameters['nome']}") String name) {
-		return new Tasklet() {
-			
-			@Override
-			public RepeatStatus execute(StepContribution contribution, ChunkContext chunkContext) throws Exception {
-				System.out.println(String.format("Olá, %s!", name));
-				return RepeatStatus.FINISHED;
-			}
-		};		
-		
+	IteratorItemReader<Integer> countToTenReader() {
+		List<Integer> oneToTen = Arrays.asList(1, 2, 3 , 4, 5, 6, 7, 8, 9, 10);
+		return new IteratorItemReader<>(oneToTen.iterator());
 	}
-
+	
+	FunctionItemProcessor<Integer, String> everOrdOddProcessor() {
+		return new FunctionItemProcessor<>(item -> item % 2 == 0 ? String.format("%s is Even", item) : String.format("%s is Odd", item));
+	}
+	
+	ItemWriter<String> printWriter() {
+		return itens -> itens.forEach(System.out::println);
+	}
+	
 }
